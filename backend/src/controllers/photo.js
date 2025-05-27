@@ -6,7 +6,8 @@ import fileModel from "../models/image.model.js"; // Adjust the import path as n
 import { getGridFSBucket } from "../helpers/mongoose.js"; // Assuming your helper file is named gridfs.js
 import { Readable } from "stream";
 import { Types } from "mongoose";
-import dotenv from 'dotenv';
+import { verifyToken } from "../helpers/firebase.js";
+import dotenv from "dotenv";
 dotenv.config();
 
 const storage = multer.memoryStorage();
@@ -40,7 +41,7 @@ const scanWithVirusTotal = async (fileBuffer) => {
 
 // Function to fetch scan results from VirusTotal
 const getScanResults = async (scanId) => {
-console.log("scanid", scanId);
+  console.log("scanid", scanId);
   try {
     const res = await axios.get(
       `https://www.virustotal.com/api/v3/analyses/${scanId}`,
@@ -171,13 +172,17 @@ export const uploadImages = (req, res) => {
 
 export const likePhoto = async (req, res) => {
   const { id } = req.params;
-  const userId = req.body.userId; // Expect user ID in request body
+  const token = req.cookies.token;
+
+  // Check for token presence
+  if (!token) {
+    return res.status(401).json({ message: "No token provided" });
+  }
 
   try {
-    // Validate presence of user ID
-    if (!userId) {
-      return res.status(400).json({ message: "User ID is required" });
-    }
+    // Decode token to get user email
+    const decoded = verifyToken(token);
+    const userId = decoded.email;
 
     // Find the photo by fileId
     const photo = await fileModel.findOne({ fileId: id });
@@ -186,14 +191,14 @@ export const likePhoto = async (req, res) => {
       return res.status(404).json({ message: "Photo not found" });
     }
 
-    // Check if the user already liked this photo
+    // Check if user has already liked the photo
     if (photo.likedBy.includes(userId)) {
       return res
         .status(400)
         .json({ message: "You have already liked this photo" });
     }
 
-    // Increment like count and update likedBy array
+    // Increment like count and add userId to likedBy
     photo.likes = (photo.likes || 0) + 1;
     photo.likedBy.push(userId);
 
@@ -204,6 +209,7 @@ export const likePhoto = async (req, res) => {
       likes: photo.likes,
     });
   } catch (err) {
+    console.error("Error liking photo:", err);
     return res.status(500).json({
       message: "Error liking photo",
       error: err.message,

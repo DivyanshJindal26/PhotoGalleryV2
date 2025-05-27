@@ -71,22 +71,13 @@ const Gallery = () => {
   }, [filters, photos]);
 
   const handleLike = async (photoId) => {
-    const storedUser = localStorage.getItem("user");
-    if (!storedUser) {
-      toast(<ErrorToast message="Please login to like photos" />);
-      return;
-    }
-
-    const userId = JSON.parse(storedUser).email;
-
     try {
       const response = await fetch(`/api/photos/${photoId}/like`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          // "X-API-KEY": <your-api-key-if-needed>,
         },
-        body: JSON.stringify({ userId }),
       });
 
       if (!response.ok) throw new Error("Failed to update like");
