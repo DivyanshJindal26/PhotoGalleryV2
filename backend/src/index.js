@@ -7,6 +7,9 @@ import { initFirebase } from "./helpers/firebase.js";
 import { connectDB } from "./helpers/mongoose.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import dotenv from 'dotenv';
+dotenv.config();
+
 
 const port = process.env.PORT || 5000;
 const app = express();

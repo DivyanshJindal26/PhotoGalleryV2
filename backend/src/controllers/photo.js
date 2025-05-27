@@ -6,6 +6,8 @@ import fileModel from "../models/image.model.js"; // Adjust the import path as n
 import { getGridFSBucket } from "../helpers/mongoose.js"; // Assuming your helper file is named gridfs.js
 import { Readable } from "stream";
 import { Types } from "mongoose";
+import dotenv from 'dotenv';
+dotenv.config();
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage }).array("files");
@@ -38,6 +40,7 @@ const scanWithVirusTotal = async (fileBuffer) => {
 
 // Function to fetch scan results from VirusTotal
 const getScanResults = async (scanId) => {
+console.log("scanid", scanId);
   try {
     const res = await axios.get(
       `https://www.virustotal.com/api/v3/analyses/${scanId}`,
@@ -299,7 +302,6 @@ export const imageFilters = async (req, res) => {
 
 export const viewImage = async (req, res) => {
   const { id } = req.params;
-  console.log("Received request to view image with ID:", id);
 
   if (!id) {
     return res.status(400).json({ message: "ID is required" });
