@@ -87,3 +87,12 @@ export const getMe = async (req, res) => {
     return res.status(401).json({ message: "Invalid token" });
   }
 };
+
+export const logout = (req, res) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: false, // Set to true if using HTTPS
+    sameSite: "strict",
+  });
+  return res.json({ message: "Logout successful" });
+};
