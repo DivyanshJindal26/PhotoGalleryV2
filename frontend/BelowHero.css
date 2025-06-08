@@ -21,7 +21,7 @@
   overflow: hidden;
   position: relative;
   transition: transform 0.3s ease-out, box-shadow 0.3s ease-out;
-  padding: 5px;
+  padding: 2px;
 }
 
 /* On hover */
