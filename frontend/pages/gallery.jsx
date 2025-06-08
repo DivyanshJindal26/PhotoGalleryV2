@@ -254,14 +254,6 @@ const Gallery = () => {
                 />
                 <div className="photo-details">
                   <p>
-                    <strong>Uploaded by:</strong>{" "}
-                    {selectedPhoto.uploader || "Unknown"}
-                  </p>
-                  <p>
-                    <strong>Date Uploaded:</strong> 📅{" "}
-                    {new Date(selectedPhoto.uploadedAt).toLocaleDateString()}
-                  </p>
-                  <p>
                     <strong>Title:</strong> {selectedPhoto.title}
                   </p>
                   <p>
