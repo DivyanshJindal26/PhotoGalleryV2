@@ -149,7 +149,7 @@ body {
 /* Modal Image */
 .modal-photo-container img {
   max-width: 100%;
-  max-height: 64vh;
+  max-height: 65vh;
   height: auto;
   width: auto;
   border-radius: 12px;
