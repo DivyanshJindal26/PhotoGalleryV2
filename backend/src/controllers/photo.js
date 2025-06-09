@@ -96,14 +96,17 @@ export const uploadImages = (req, res) => {
         );
 
         // VirusTotal scan
-        const scanId = await scanWithVirusTotal(file.buffer);
-        const isInfected = await getScanResults(scanId);
-
-        if (isInfected) {
-          console.warn(`Virus detected in file ${file.originalname}`);
-          return res
-            .status(400)
-            .json({ message: `Virus detected in file ${file.originalname}` });
+        try {
+          const scanId = await scanWithVirusTotal(file.buffer);
+          const isInfected = await getScanResults(scanId);
+          
+          if (isInfected) {
+            console.warn(`Virus detected in file ${file.originalname}, skipping`);
+            continue; // Skip this file and proceed with the next one
+          }
+        } catch (virusError) {
+          console.warn(`VirusTotal error for ${file.originalname}, skipping: ${virusError.message}`);
+          continue; // Skip this file if there's any error from VirusTotal
         }
 
         console.log(`File ${file.originalname} is clean.`);
