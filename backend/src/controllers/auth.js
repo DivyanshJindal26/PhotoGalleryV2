@@ -84,6 +84,12 @@ export const getMe = async (req, res) => {
     });
   } catch (err) {
     console.error("Token verification failed:", err);
+    // Clear the invalid cookie
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: false, // Set to true if using HTTPS
+      sameSite: "strict",
+    });
     return res.status(401).json({ message: "Invalid token" });
   }
 };

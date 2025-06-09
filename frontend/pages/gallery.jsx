@@ -1,16 +1,26 @@
-import React, { useState, useEffect, useCallback } from "react";
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import "./gallery.css";
 import { ErrorToast } from "../components/Toast";
 import { toast } from "react-toastify";
 
+const ITEMS_PER_PAGE = 20;
+
 const Gallery = () => {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
+  const observerRef = useRef();
+  const loadingRef = useRef();
 
   const [photos, setPhotos] = useState([]);
   const [filteredPhotos, setFilteredPhotos] = useState([]);
+  const [displayedPhotos, setDisplayedPhotos] = useState([]);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [filters, setFilters] = useState({
     event: queryParams.get("event") || "",
     uploader: "",
@@ -33,6 +43,14 @@ const Gallery = () => {
     applyFilters();
   }, [filters, photos]);
 
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+    setDisplayedPhotos([]);
+    setHasMore(true);
+    loadMorePhotos(1, filteredPhotos);
+  }, [filteredPhotos]);
+
   const fetchPhotos = async () => {
     try {
       const response = await fetch(`/api/photos?approved=true`, {
@@ -49,26 +67,79 @@ const Gallery = () => {
       setPhotos(data.files || []);
     } catch (error) {
       toast(<ErrorToast message="Failed to fetch photos" />);
-      // console.error("Error fetching photos:", error);
       setPhotos([]);
       setFilteredPhotos([]);
     }
   };
 
   const applyFilters = useCallback(() => {
-    setFilteredPhotos(
-      photos.filter((photo) => {
-        return (
-          (!filters.event || photo.event === filters.event) &&
-          (!filters.uploader || photo.uploader === filters.uploader) &&
-          (!filters.startDate ||
-            new Date(photo.uploadedAt) >= new Date(filters.startDate)) &&
-          (!filters.endDate ||
-            new Date(photo.uploadedAt) <= new Date(filters.endDate))
-        );
-      })
-    );
+    const filtered = photos.filter((photo) => {
+      return (
+        (!filters.event || photo.event === filters.event) &&
+        (!filters.uploader || photo.uploader === filters.uploader) &&
+        (!filters.startDate ||
+          new Date(photo.uploadedAt) >= new Date(filters.startDate)) &&
+        (!filters.endDate ||
+          new Date(photo.uploadedAt) <= new Date(filters.endDate))
+      );
+    });
+    setFilteredPhotos(filtered);
   }, [filters, photos]);
+
+  const loadMorePhotos = useCallback(
+    (page = currentPage, sourcePhotos = filteredPhotos) => {
+      if (loading) return;
+
+      setLoading(true);
+
+      const startIndex = (page - 1) * ITEMS_PER_PAGE;
+      const endIndex = startIndex + ITEMS_PER_PAGE;
+      const newPhotos = sourcePhotos.slice(startIndex, endIndex);
+
+      if (newPhotos.length === 0) {
+        setHasMore(false);
+        setLoading(false);
+        return;
+      }
+
+      setTimeout(() => {
+        if (page === 1) {
+          setDisplayedPhotos(newPhotos);
+        } else {
+          setDisplayedPhotos((prev) => [...prev, ...newPhotos]);
+        }
+
+        setCurrentPage(page + 1);
+        setHasMore(endIndex < sourcePhotos.length);
+        setLoading(false);
+      }, 300); // Small delay to show loading state
+    },
+    [currentPage, filteredPhotos, loading]
+  );
+
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading) {
+          loadMorePhotos();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (loadingRef.current) {
+      observer.observe(loadingRef.current);
+    }
+
+    observerRef.current = observer;
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [hasMore, loading, loadMorePhotos]);
 
   const handleLike = async (photoId) => {
     try {
@@ -83,14 +154,21 @@ const Gallery = () => {
       if (!response.ok) throw new Error("Failed to update like");
 
       const data = await response.json();
+
+      // Update both photos and displayedPhotos
       setPhotos((prevPhotos) =>
+        prevPhotos.map((photo) =>
+          photo.fileId === photoId ? { ...photo, likes: data.likes } : photo
+        )
+      );
+
+      setDisplayedPhotos((prevPhotos) =>
         prevPhotos.map((photo) =>
           photo.fileId === photoId ? { ...photo, likes: data.likes } : photo
         )
       );
     } catch (error) {
       toast(<ErrorToast message="Failed to like the photo" />);
-      // console.error("Error liking the photo:", error);
     }
   };
 
@@ -98,9 +176,7 @@ const Gallery = () => {
     try {
       const response = await fetch(`/api/photos/${photo.fileId}/download`, {
         method: "GET",
-        headers: {
-          // "X-API-KEY": <your-api-key-if-needed>,
-        },
+        headers: {},
       });
 
       if (!response.ok)
@@ -115,7 +191,6 @@ const Gallery = () => {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       toast(<ErrorToast message="Failed to download image" />);
-      // console.error("Error downloading image:", error);
     }
   };
 
@@ -131,7 +206,7 @@ const Gallery = () => {
       try {
         const response = await fetch("/api/auth/me", {
           method: "GET",
-          credentials: "include", // ensures cookies are sent
+          credentials: "include",
         });
 
         if (response.ok) {
@@ -141,7 +216,6 @@ const Gallery = () => {
           setIsAdmin(false);
         }
       } catch (error) {
-        // console.error("Error checking admin status:", error);
         setIsAdmin(false);
       }
     };
@@ -201,38 +275,31 @@ const Gallery = () => {
       </div>
 
       <div className="photo-grid-container">
-        {filteredPhotos.length === 0 ? (
+        {displayedPhotos.length === 0 && !loading ? (
           <p className="no-photos">No photos found</p>
         ) : (
-          <div className="photo-grid">
-            {filteredPhotos.map((photo) => (
-              <div key={photo.fileId} className="photo-card">
-                {/* Use view endpoint to stream image */}
-                <img
-                  src={`/api/photos/${photo.fileId}/view`}
-                  alt={photo.fileName}
-                  className="photo small-photo"
-                  onClick={() => setSelectedPhoto(photo)}
+          <>
+            <div className="photo-grid">
+              {displayedPhotos.map((photo) => (
+                <LazyPhotoCard
+                  key={photo.fileId}
+                  photo={photo}
+                  onPhotoClick={setSelectedPhoto}
+                  onLike={handleLike}
                 />
-                <div className="photo-info">
-                  <p className="photo-user">{photo.uploader || "Unknown"}</p>
-                  <p className="photo-date">
-                    📅 {new Date(photo.uploadedAt).toLocaleDateString()}
-                  </p>
-                  <p className="photo-title">{photo.title}</p>
-                  <p className="photo-event">{`Event: ${photo.event}`}</p>
+              ))}
+            </div>
+
+            {/* Loading indicator and infinite scroll trigger */}
+            <div ref={loadingRef} className="loading-container">
+              {loading && (
+                <div className="loading-spinner">
+                  <div className="spinner"></div>
+                  <p>Loading more photos...</p>
                 </div>
-                <div className="like-container">
-                  <button
-                    className="like-button"
-                    onClick={() => handleLike(photo.fileId)}
-                  >
-                    ❤️ {photo.likes || 0}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              )}
+            </div>
+          </>
         )}
 
         {selectedPhoto && (
@@ -270,7 +337,6 @@ const Gallery = () => {
               </button>
 
               <div className="like-container">
-                {/* Admin disapprove button if user is admin */}
                 {isAdmin && (
                   <button
                     className="disapprove-button"
@@ -293,7 +359,6 @@ const Gallery = () => {
                         toast(
                           <ErrorToast message="Failed to disapprove image" />
                         );
-                        // console.error("Error disapproving image:", error);
                       }
                     }}
                   >
@@ -312,6 +377,63 @@ const Gallery = () => {
         )}
       </div>
     </>
+  );
+};
+
+// Lazy loading photo card component
+const LazyPhotoCard = ({ photo, onPhotoClick, onLike }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isInView, setIsInView] = useState(false);
+  const imgRef = useRef();
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsInView(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (imgRef.current) {
+      observer.observe(imgRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={imgRef} className="photo-card">
+      {isInView && (
+        <>
+          <img
+            src={`/api/photos/${photo.fileId}/view`}
+            alt={photo.fileName}
+            className={`photo small-photo ${isLoaded ? "loaded" : "loading"}`}
+            onClick={() => onPhotoClick(photo)}
+            onLoad={() => setIsLoaded(true)}
+            loading="lazy"
+          />
+          {!isLoaded && <div className="image-placeholder">...</div>}
+        </>
+      )}
+
+      <div className="photo-info">
+        <p className="photo-user">{photo.uploader || "Unknown"}</p>
+        <p className="photo-date">
+          📅 {new Date(photo.uploadedAt).toLocaleDateString()}
+        </p>
+        <p className="photo-title">{photo.title}</p>
+        <p className="photo-event">{`Event: ${photo.event}`}</p>
+      </div>
+      <div className="like-container">
+        <button className="like-button" onClick={() => onLike(photo.fileId)}>
+          ❤️ {photo.likes || 0}
+        </button>
+      </div>
+    </div>
   );
 };
 
