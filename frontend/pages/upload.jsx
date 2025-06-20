@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import "./upload.css";
 import { toast } from "react-toastify";
 import { ErrorToast, SuccessToast } from "../components/Toast";
+import heic2any from "heic2any";
 
 export default function Upload() {
   const [images, setImages] = useState([]);
@@ -44,14 +45,51 @@ export default function Upload() {
   }, []);
 
   // Handle File Upload
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event) => {
     const files = Array.from(event.target.files);
-    const imagePreviews = files.map((file) => ({
-      file,
-      preview: URL.createObjectURL(file),
-      name: file.name,
-    }));
-    setImages([...images, ...imagePreviews]);
+    const imagePreviews = [];
+
+    for (const file of files) {
+      // Convert HEIC to JPEG using heic2any
+      if (
+        file.type === "image/heic" ||
+        file.name.toLowerCase().endsWith(".heic")
+      ) {
+        try {
+          const convertedBlob = await heic2any({
+            blob: file,
+            toType: "image/jpeg",
+            quality: 0.8,
+          });
+
+          const convertedFile = new File(
+            [convertedBlob],
+            file.name.replace(/\.heic$/i, ".jpg"),
+            { type: "image/jpeg" }
+          );
+
+          imagePreviews.push({
+            file: convertedFile,
+            preview: URL.createObjectURL(convertedFile),
+            name: convertedFile.name,
+          });
+        } catch (err) {
+          console.error("HEIC conversion failed", err);
+          toast(
+            <ErrorToast message="HEIC image conversion failed. Please try another file." />
+          );
+        }
+      } else {
+        // Regular image (jpeg/png/webp etc.)
+        imagePreviews.push({
+          file,
+          preview: URL.createObjectURL(file),
+          name: file.name,
+        });
+      }
+    }
+
+    setImages((prev) => [...prev, ...imagePreviews]);
   };
 
   // Remove Image

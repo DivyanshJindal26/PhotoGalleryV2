@@ -83,7 +83,10 @@ const Gallery = () => {
         },
       });
 
-      if (!response.ok) throw new Error("Failed to update like");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to like the photo");
+      }
 
       const data = await response.json();
 
@@ -106,7 +109,7 @@ const Gallery = () => {
         setSelectedPhoto((prev) => ({ ...prev, likes: data.likes }));
       }
     } catch (error) {
-      toast(<ErrorToast message="Failed to like the photo" />);
+      toast(<ErrorToast message={error.message} />);
       // console.error("Error liking the photo:", error);
     }
   };
