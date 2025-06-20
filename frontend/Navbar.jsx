@@ -8,6 +8,8 @@ import {
 } from "firebase/auth";
 import { initializeApp } from "firebase/app";
 import "./Navbar.css";
+import { toast } from "react-toastify";
+import { ErrorToast } from "./components/Toast";
 
 // Firebase Config from .env
 const firebaseConfig = {
@@ -65,7 +67,10 @@ const Navbar = () => {
 
       if (!email.endsWith("@students.iitmandi.ac.in")) {
         await signOut(auth);
-        setError("Only students.iitmandi.ac.in emails are allowed.");
+        toast(
+          <ErrorToast message="Only students.iitmandi.ac.in emails are allowed." />
+        );
+        // setError("Only students.iitmandi.ac.in emails are allowed.");
         return;
       }
 
@@ -79,7 +84,9 @@ const Navbar = () => {
       });
 
       if (!response.ok) {
-        setError("Login failed");
+        const errorData = await response.json();
+        // console.error("Login error:", errorData);
+        toast(<ErrorToast message="Login failed" />);
         await signOut(auth);
         return;
       }
@@ -88,7 +95,7 @@ const Navbar = () => {
       setError(null);
     } catch (err) {
       // console.error("Auth error:", err);
-      setError("Authentication error. Please try again.");
+      toast(<ErrorToast message="Authentication error. Please try again." />);
     }
   };
 
@@ -102,6 +109,7 @@ const Navbar = () => {
       setUser(null);
     } catch (err) {
       // console.error("Logout error:", err);
+      toast(<ErrorToast message="Logout failed. Please try again." />);
       setError("Logout failed. Please try again.");
     }
   };
