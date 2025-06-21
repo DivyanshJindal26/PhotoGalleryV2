@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   FiX,
   FiPlay,
@@ -32,20 +32,42 @@ export default function ImageViewer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [touchStartX, setTouchStartX] = useState(null);
   const [touchEndX, setTouchEndX] = useState(null);
+  const [currentImageSrc, setCurrentImageSrc] = useState("");
 
   // Drag/Pan state for zoomed images
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  // Enhanced image caching state
-  const [cachedImages, setCachedImages] = useState(new Set());
-  const [loadingImages, setLoadingImages] = useState(new Set());
-  const imageCache = useRef(new Map());
-  const preloadQueue = useRef([]);
-  const isPreloading = useRef(false);
-  const CACHE_RANGE = 8; // Increased cache range for better performance
-  const PRIORITY_RANGE = 2; // Immediate priority for adjacent images
+  const currentPhoto = photos[currentIndex];
+
+  // Immediate image src update - no delays, no complex caching
+  useEffect(() => {
+    if (!currentPhoto) return;
+
+    const imageUrl = `/api/photos/${currentPhoto.fileId}/view`;
+    setCurrentImageSrc(imageUrl);
+
+    // Background preload for next/prev images (non-blocking)
+    const preloadAdjacent = () => {
+      const nextIndex = (currentIndex + 1) % photos.length;
+      const prevIndex =
+        currentIndex === 0 ? photos.length - 1 : currentIndex - 1;
+
+      if (photos[nextIndex]) {
+        const nextImg = new Image();
+        nextImg.src = `/api/photos/${photos[nextIndex].fileId}/view`;
+      }
+
+      if (photos[prevIndex]) {
+        const prevImg = new Image();
+        prevImg.src = `/api/photos/${photos[prevIndex].fileId}/view`;
+      }
+    };
+
+    // Preload in background without blocking
+    setTimeout(preloadAdjacent, 0);
+  }, [currentIndex, currentPhoto, photos]);
 
   // Check if the user is in fullscreen mode
   useEffect(() => {
@@ -58,8 +80,6 @@ export default function ImageViewer({
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, []);
-
-  const currentPhoto = photos[currentIndex];
 
   // Find current photo index
   useEffect(() => {
@@ -84,200 +104,6 @@ export default function ImageViewer({
   useEffect(() => {
     setDragOffset({ x: 0, y: 0 });
   }, [currentIndex, isZoomed]);
-
-  // Enhanced image preloading function with priority
-  const preloadImage = useCallback((photo, priority = false) => {
-    return new Promise((resolve, reject) => {
-      const imageUrl = `/api/photos/${photo.fileId}/view`;
-
-      // Check if already cached
-      if (imageCache.current.has(imageUrl)) {
-        resolve(imageCache.current.get(imageUrl));
-        return;
-      }
-
-      // Check if already loading
-      if (loadingImages.has(photo.fileId)) {
-        // Wait for existing load to complete
-        const checkLoaded = () => {
-          if (imageCache.current.has(imageUrl)) {
-            resolve(imageCache.current.get(imageUrl));
-          } else {
-            setTimeout(checkLoaded, 50);
-          }
-        };
-        checkLoaded();
-        return;
-      }
-
-      setLoadingImages((prev) => new Set([...prev, photo.fileId]));
-
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-
-      img.onload = () => {
-        imageCache.current.set(imageUrl, img);
-        setCachedImages((prev) => new Set([...prev, photo.fileId]));
-        setLoadingImages((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(photo.fileId);
-          return newSet;
-        });
-        resolve(img);
-      };
-
-      img.onerror = () => {
-        setLoadingImages((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(photo.fileId);
-          return newSet;
-        });
-        reject(new Error(`Failed to load image: ${imageUrl}`));
-      };
-
-      img.src = imageUrl;
-    });
-  }, []);
-
-  // Process preload queue
-  const processPreloadQueue = useCallback(async () => {
-    if (isPreloading.current || preloadQueue.current.length === 0) return;
-
-    isPreloading.current = true;
-
-    while (preloadQueue.current.length > 0) {
-      const batch = preloadQueue.current.splice(0, 2); // Smaller batches for faster processing
-
-      try {
-        await Promise.allSettled(
-          batch.map(({ photo, priority }) => preloadImage(photo, priority))
-        );
-      } catch (error) {
-        console.warn("Error preloading batch:", error);
-      }
-
-      // Minimal delay for priority images, slightly longer for others
-      const delay = batch.some((item) => item.priority) ? 10 : 50;
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-
-    isPreloading.current = false;
-  }, [preloadImage]);
-
-  // Enhanced caching with immediate priority for adjacent images
-  useEffect(() => {
-    const cacheImagesAroundCurrent = () => {
-      if (!photos.length) return;
-
-      // Clear existing queue
-      preloadQueue.current = [];
-
-      // Priority images (immediate neighbors)
-      const priorityIndices = [];
-      for (let offset = -PRIORITY_RANGE; offset <= PRIORITY_RANGE; offset++) {
-        const index = currentIndex + offset;
-        if (index >= 0 && index < photos.length && index !== currentIndex) {
-          priorityIndices.push(index);
-        }
-      }
-
-      // Regular cache images
-      const regularIndices = [];
-      const startIndex = Math.max(0, currentIndex - CACHE_RANGE);
-      const endIndex = Math.min(photos.length - 1, currentIndex + CACHE_RANGE);
-
-      for (let i = startIndex; i <= endIndex; i++) {
-        if (i !== currentIndex && !priorityIndices.includes(i)) {
-          regularIndices.push(i);
-        }
-      }
-
-      // Add priority images first
-      priorityIndices.forEach((index) => {
-        const photo = photos[index];
-        if (
-          photo &&
-          !cachedImages.has(photo.fileId) &&
-          !loadingImages.has(photo.fileId)
-        ) {
-          preloadQueue.current.push({ photo, priority: true });
-        }
-      });
-
-      // Add regular images
-      regularIndices.forEach((index) => {
-        const photo = photos[index];
-        if (
-          photo &&
-          !cachedImages.has(photo.fileId) &&
-          !loadingImages.has(photo.fileId)
-        ) {
-          preloadQueue.current.push({ photo, priority: false });
-        }
-      });
-
-      // Process the queue
-      processPreloadQueue();
-    };
-
-    // Immediate execution for current index changes
-    const timeoutId = setTimeout(cacheImagesAroundCurrent, 0);
-    return () => clearTimeout(timeoutId);
-  }, [currentIndex, photos, cachedImages, loadingImages, processPreloadQueue]);
-
-  // Aggressive cleanup with better memory management
-  useEffect(() => {
-    const cleanupCache = () => {
-      const maxCacheSize = Math.min(photos.length, CACHE_RANGE * 3); // More generous cache size
-
-      if (imageCache.current.size > maxCacheSize) {
-        const currentRange = new Set();
-        const startIndex = Math.max(0, currentIndex - CACHE_RANGE * 1.5);
-        const endIndex = Math.min(
-          photos.length - 1,
-          currentIndex + CACHE_RANGE * 1.5
-        );
-
-        for (let i = startIndex; i <= endIndex; i++) {
-          if (photos[i]) {
-            currentRange.add(`/api/photos/${photos[i].fileId}/view`);
-          }
-        }
-
-        // Remove images not in current range
-        const urlsToRemove = [];
-        for (const [url] of imageCache.current) {
-          if (!currentRange.has(url)) {
-            urlsToRemove.push(url);
-          }
-        }
-
-        // Remove in batches to avoid blocking
-        urlsToRemove.forEach((url) => imageCache.current.delete(url));
-
-        // Update cached images set
-        setCachedImages((prev) => {
-          const newSet = new Set();
-          for (let i = startIndex; i <= endIndex; i++) {
-            if (photos[i] && prev.has(photos[i].fileId)) {
-              newSet.add(photos[i].fileId);
-            }
-          }
-          return newSet;
-        });
-      }
-    };
-
-    const cleanupTimer = setTimeout(cleanupCache, 10000); // Less frequent cleanup
-    return () => clearTimeout(cleanupTimer);
-  }, [currentIndex, photos]);
-
-  // Preload current image immediately on mount
-  useEffect(() => {
-    if (currentPhoto && !cachedImages.has(currentPhoto.fileId)) {
-      preloadImage(currentPhoto, true);
-    }
-  }, [currentPhoto, cachedImages, preloadImage]);
 
   const goToPrevious = useCallback(() => {
     setCurrentIndex((prev) => (prev === 0 ? photos.length - 1 : prev - 1));
@@ -543,7 +369,7 @@ export default function ImageViewer({
       {/* Main Image */}
       <div className="flex items-center justify-center w-full h-full">
         <img
-          src={`/api/photos/${currentPhoto.fileId}/view`}
+          src={currentImageSrc || "/placeholder.svg"}
           alt={currentPhoto.fileName}
           className={`w-full h-full object-contain ${
             isZoomed

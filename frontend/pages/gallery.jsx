@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { FiInfo } from "react-icons/fi";
+import { FiCalendar, FiUser, FiImage } from "react-icons/fi";
 import ImageViewer from "./image-viewer";
-import "./gallery.css";
 import { ErrorToast } from "../components/Toast";
 import { toast } from "react-toastify";
 import { useLocation } from "react-router-dom";
+import "./gallery.css"; // Assuming you have a CSS file for styles
 
 const ITEMS_PER_PAGE = 20;
 
@@ -72,7 +72,6 @@ export default function GalleryWithViewer() {
       setPhotos(data.files || []);
     } catch (error) {
       toast(<ErrorToast message="Failed to fetch photos" />);
-      // console.error("Error fetching photos:", error);
       setPhotos([]);
       setFilteredPhotos([]);
     }
@@ -138,7 +137,7 @@ export default function GalleryWithViewer() {
         setCurrentPage(page + 1);
         setHasMore(endIndex < sourcePhotos.length);
         setLoading(false);
-      }, 300); // Small delay to show loading state
+      }, 300);
     },
     [currentPage, filteredPhotos, loading]
   );
@@ -183,7 +182,6 @@ export default function GalleryWithViewer() {
 
       const data = await response.json();
 
-      // Update both photos and displayedPhotos
       setPhotos((prevPhotos) =>
         prevPhotos.map((photo) =>
           photo.fileId === photoId ? { ...photo, likes: data.likes } : photo
@@ -219,7 +217,6 @@ export default function GalleryWithViewer() {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       toast(<ErrorToast message="Failed to download image" />);
-      // console.error("Error downloading image:", error);
     }
   };
 
@@ -234,7 +231,7 @@ export default function GalleryWithViewer() {
 
       if (response.ok) {
         setSelectedPhoto(null);
-        fetchPhotos(); // Refresh the photos
+        fetchPhotos();
       }
     } catch (error) {
       console.error("Error disapproving image:", error);
@@ -247,8 +244,8 @@ export default function GalleryWithViewer() {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-yellow-400">
-      {/* Filter Controls */}
+    <div className="min-h-screen bg-black text-white">
+      {/* Modern Filter Controls */}
       <div className="filter-tab">
         <select
           name="event"
@@ -301,11 +298,18 @@ export default function GalleryWithViewer() {
       {/* Photo Grid */}
       <div className="photo-grid-container">
         {filteredPhotos.length === 0 ? (
-          <div className="no-photos">No photos found</div>
+          <div className="no-photos">
+            <FiImage className="text-gray-600 mb-4" size={64} />
+            <h3 className="text-xl font-semibold text-gray-400 mb-2">
+              No photos found
+            </h3>
+            <p className="text-gray-500">
+              Try adjusting your filters to see more photos
+            </p>
+          </div>
         ) : (
           <>
-            <div className="photo-grid">
-              {" "}
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {displayedPhotos.map((photo) => (
                 <LazyPhotoCard
                   key={photo.fileId}
@@ -316,13 +320,12 @@ export default function GalleryWithViewer() {
               ))}
             </div>
 
-            {/* Loading indicator and infinite scroll trigger */}
-
-            <div ref={loadingRef} className="loading-container">
+            {/* Loading indicator */}
+            <div ref={loadingRef} className="flex justify-center py-12">
               {loading && (
-                <div className="loading-spinner">
-                  <div className="spinner"></div>
-                  <p>Loading more photos...</p>
+                <div className="flex flex-col items-center gap-4">
+                  <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-gray-400">Loading more photos...</p>
                 </div>
               )}
             </div>
@@ -348,75 +351,88 @@ export default function GalleryWithViewer() {
 
 const LazyPhotoCard = ({ photo, onPhotoClick, onLike }) => {
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isInView, setIsInView] = useState(false);
-  const [isInfoVisible, setIsInfoVisible] = useState(null);
-  const imgRef = useRef();
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsInView(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.1 }
-    );
-
-    if (imgRef.current) {
-      observer.observe(imgRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
 
   return (
-    <div ref={imgRef} className="photo-card">
-      {isInView && (
-        <>
-          <img
-            src={`/api/photos/${photo.fileId}/view`}
-            alt={photo.fileName}
-            className={`photo small-photo ${isLoaded ? "loaded" : "loading"}`}
-            onClick={() => onPhotoClick(photo)}
-            onLoad={() => setIsLoaded(true)}
-            loading="lazy"
-          />
-          {!isLoaded && <div className="image-placeholder">...</div>}
-        </>
-      )}
+    <div
+      className="group relative bg-white/5 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-yellow-400/20"
+      onClick={() => onPhotoClick(photo)}
+    >
+      <div className="aspect-square relative overflow-hidden">
+        <img
+          src={`/api/photos/${photo.fileId}/view`}
+          alt={photo.fileName}
+          className={`w-full h-full object-cover transition-all duration-500 ${
+            isLoaded ? "opacity-100 scale-100" : "opacity-0 scale-110"
+          }`}
+          onLoad={() => setIsLoaded(true)}
+          loading="lazy"
+        />
+        {!isLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/5">
+            <div className="w-6 h-6 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        )}
+      </div>
 
-      {/* Info Button */}
-      <button
-        className="absolute top-2 left-2 bg-white/60 text-black p-2.5 rounded-full hover:bg-white transition-colors"
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsInfoVisible(isInfoVisible ? null : photo.fileId);
-        }}
+      {/* Mobile overlay - only title */}
+      <div
+        className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4 md:hidden"
+        style={{ padding: "1rem 1rem 1rem" }}
       >
-        <FiInfo size={20} />
-      </button>
-
-      {/* Info Overlay */}
-      {isInfoVisible && (
-        <div className="photo-info">
-          <p className="photo-user">{photo.uploader || "Unknown"}</p>
-          <p className="photo-date">
-            📅 {new Date(photo.uploadedAt).toLocaleDateString()}
+        {photo.title && (
+          <p className="text-white font-medium text-sm leading-tight">
+            {photo.title}
           </p>
-          <p className="photo-title">{photo.title}</p>
-          <p className="photo-event">{`Event: ${photo.event}`}</p>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Like Button */}
-      <div className="like-container">
+      {/* Desktop overlay - full info */}
+      <div className="hidden md:block absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <div
+          className="absolute bottom-0 left-0 right-0 p-6"
+          style={{ margin: "1rem 1rem 1rem" }}
+        >
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <FiUser className="text-yellow-400" size={14} />
+              <p className="text-yellow-400 font-semibold text-sm">
+                {photo.uploader || "Unknown"}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <FiCalendar className="text-gray-300" size={14} />
+              <p className="text-gray-300 text-xs">
+                {new Date(photo.uploadedAt).toLocaleDateString()}
+              </p>
+            </div>
+
+            {photo.title && (
+              <p className="text-white font-medium text-sm leading-tight mt-1">
+                {photo.title}
+              </p>
+            )}
+
+            {photo.event && (
+              <div className="flex items-center gap-2">
+                <FiImage className="text-blue-400" size={14} />
+                <p className="text-blue-400 text-xs font-medium">
+                  {photo.event}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Like Button - hidden on mobile */}
+      <div className="like-container hidden md:block opacity-0 md:group-hover:opacity-100">
         <button
           className="like-button"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            handleLike(photo.fileId);
+            onLike(photo.fileId);
           }}
         >
           ❤️ {photo.likes || 0}
