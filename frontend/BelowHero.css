@@ -104,7 +104,7 @@
 
   .box {
     height: 200px; /* Decrease height for very small screens */
-    padding: 10px;
+    padding: 3px;
   }
 
   .view-album-button {

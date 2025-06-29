@@ -2,6 +2,9 @@ import multer from "multer";
 import axios from "axios";
 import FormData from "form-data";
 import sharp from "sharp";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
 import fileModel from "../models/image.model.js"; // Adjust the import path as necessary
 import { getGridFSBucket } from "../helpers/mongoose.js"; // Assuming your helper file is named gridfs.js
 import { Readable } from "stream";
@@ -9,6 +12,9 @@ import { Types } from "mongoose";
 import { verifyToken } from "../helpers/firebase.js";
 import dotenv from "dotenv";
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage }).array("files");
@@ -99,13 +105,17 @@ export const uploadImages = (req, res) => {
         try {
           const scanId = await scanWithVirusTotal(file.buffer);
           const isInfected = await getScanResults(scanId);
-          
+
           if (isInfected) {
-            console.warn(`Virus detected in file ${file.originalname}, skipping`);
+            console.warn(
+              `Virus detected in file ${file.originalname}, skipping`
+            );
             continue; // Skip this file and proceed with the next one
           }
         } catch (virusError) {
-          console.warn(`VirusTotal error for ${file.originalname}, skipping: ${virusError.message}`);
+          console.warn(
+            `VirusTotal error for ${file.originalname}, skipping: ${virusError.message}`
+          );
           continue; // Skip this file if there's any error from VirusTotal
         }
 
@@ -252,18 +262,47 @@ export const downloadPhoto = async (req, res) => {
 
     const downloadStream = gfs.openDownloadStream(file.fileId);
 
+    // Load watermark image and resize it
+    const logoPath = path.join(__dirname, "../assets/ico.png");
+    const resizedLogoBuffer = await sharp(logoPath)
+      .resize({ width: 100 }) // resize as needed
+      .toBuffer();
+
+    // Create SVG overlay with text
+    const svgTextOverlay = Buffer.from(`
+      <svg width="800" height="100">
+        <text x="400" y="70" font-size="18" text-anchor="middle" fill="white" font-family="Arial" opacity="0.8">
+          All Rights Reserved by SnTC, IIT Mandi
+        </text>
+      </svg>
+    `);
+
+    // Transform stream using sharp
+    const transform = sharp()
+      .composite([
+        { input: resizedLogoBuffer, gravity: "southeast" },
+        { input: svgTextOverlay, gravity: "south" },
+      ])
+      .jpeg()
+      .on("error", (err) => {
+        console.error("Sharp error:", err.message);
+        res.status(500).json({ message: "Image processing failed" });
+      });
+
+    // Set response headers
     res.set({
       "Content-Type": "image/jpeg",
       "Content-Disposition": `attachment; filename="${file.fileName}"`,
     });
 
-    downloadStream.pipe(res).on("error", () => {
-      res.status(404).json({ message: "File stream error" });
-    });
+    // Pipe GridFS image → sharp → response
+    downloadStream.pipe(transform).pipe(res);
   } catch (err) {
-    return res
-      .status(500)
-      .json({ message: "Error downloading file", error: err.message });
+    console.error("Error downloading image:", err.message);
+    return res.status(500).json({
+      message: "Error downloading file",
+      error: err.message,
+    });
   }
 };
 
@@ -312,35 +351,45 @@ export const imageFilters = async (req, res) => {
 export const viewImage = async (req, res) => {
   const { id } = req.params;
 
-  if (!id) {
-    return res.status(400).json({ message: "ID is required" });
-  }
-
-  if (!Types.ObjectId.isValid(id)) {
+  if (!id) return res.status(400).json({ message: "ID is required" });
+  if (!Types.ObjectId.isValid(id))
     return res.status(400).json({ message: "Invalid ID format" });
-  }
 
   const gfs = getGridFSBucket();
 
   try {
     const file = await fileModel.findOne({ fileId: id });
-    if (!file) {
-      return res.status(404).json({ message: "Metadata not found" });
-    }
+    if (!file) return res.status(404).json({ message: "Metadata not found" });
 
     const fileObjId = new Types.ObjectId(id);
-
     const downloadStream = gfs.openDownloadStream(fileObjId);
 
+    const logoPath = path.join(__dirname, "../assets/ico.png");
+    const logoBuffer = await sharp(logoPath)
+      .resize({ width: 100 }) // resize logo to 100px wide (adjust as needed)
+      .toBuffer();
+
+    // Convert image stream + add watermark using sharp
+    const imageTransformer = sharp()
+      .composite([
+        {
+          input: logoBuffer,
+          gravity: "southeast", // bottom-right
+          blend: "over",
+        },
+      ])
+      .on("error", async (err) => {
+        console.error("Sharp error:", err.message);
+        res.status(500).json({ message: "Image processing failed" });
+      });
+
     res.set({
-      "Content-Type": file.contentType || "application/octet-stream",
+      "Content-Type": file.contentType || "image/jpeg",
       "Content-Disposition": `inline; filename="${file.fileName}"`,
     });
 
     downloadStream.on("error", async (err) => {
       console.error("Stream error:", err.message);
-
-      // Delete from GridFS and metadata collection
       try {
         await gfs.delete(fileObjId);
         await fileModel.deleteOne({ fileId: id });
@@ -354,9 +403,10 @@ export const viewImage = async (req, res) => {
       });
     });
 
-    downloadStream.pipe(res);
+    // Pipe through sharp to apply watermark, then to response
+    downloadStream.pipe(imageTransformer).pipe(res);
   } catch (err) {
-    console.error("Error viewing image:", err.message);
+    console.error("Error viewing image:", err);
     return res.status(500).json({
       message: "Error viewing image",
       error: err.message,

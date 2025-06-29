@@ -10,6 +10,7 @@ const ErrorToast = ({ message }) => (
       display: "flex",
       alignItems: "center",
       gap: "8px",
+      zIndex: 1000, // Ensure it appears above other content
     }}
   >
     ⚠️ {message}
@@ -25,6 +26,7 @@ const SuccessToast = ({ message }) => (
       display: "flex",
       alignItems: "center",
       gap: "8px",
+      zIndex: 1000, // Ensure it appears above other content
     }}
   >
     ✅ {message}
