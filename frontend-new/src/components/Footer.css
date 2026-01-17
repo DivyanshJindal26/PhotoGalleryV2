@@ -1,0 +1,35 @@
+.footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 16px;
+  width: 100%;
+  border-top: 1.5px solid rgba(80, 80, 120, 0.25);
+  color: #e0e6ed;
+  font-size: 16px;
+  text-align: center;
+  margin-top: 40px;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.45);
+  background: linear-gradient(90deg, #23233b 60%, #181820 100%);
+  border-radius: 18px 18px 0 0;
+  backdrop-filter: blur(8px) saturate(140%);
+}
+
+.footer-text {
+  position: relative;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.footer-text::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, #6ddcff, #7e60ff);
+  border-radius: 1px;
+  opacity: 0.5;
+}
